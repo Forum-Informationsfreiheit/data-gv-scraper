@@ -11,12 +11,13 @@ from parse import emptyOrNull
 
 def generateReports(includesFileCheck):
     session = get_session(init_db())
-    importCommunity(session)
-    generateMetadataReport(session, includesFileCheck)
-    generateKeywordReport(session)
-    generateCategoriesReport(session)
-    generateCommunityReport(session)
-    generateReportWithFailedUrls(session)
+    # importCommunity(session)
+    # generateMetadataReport(session, includesFileCheck)
+    # generateKeywordReport(session)
+    # generateCategoriesReport(session)
+    # generateCommunityReport(session)
+    # generateReportWithFailedUrls(session)
+    generateListOfDatasetNames(session)
 
 def generateMetadataReport(session, includesFileCheck):
     print("generating metadata report...")
@@ -215,7 +216,7 @@ class CommunityReport():
     publishedOffenerHaushalt = 0
 
 def generateCommunityReport(session):
-    print("generating community report...")
+    print("\ngenerating municipalities report...")
     queryAllCommunties = session.query(Community).order_by(Community.people.desc()).all()
 
     communities= {}
@@ -252,7 +253,7 @@ def generateCommunityReport(session):
             communities.get(entry[1].id).publishedOffenerHaushalt += 1
             entriesPublishedByOffenerHaushalt +=1
 
-    with open("reports/communityCount.csv", mode = 'w', newline='') as file:
+    with open("reports/municipalitiesCount.csv", mode = 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([
             "glz", 
@@ -311,28 +312,28 @@ def generateCommunityReport(session):
                 if (community.datasets-community.publishedOffenerHaushalt > 0):
                     withoutOffenerHaushaltSmall += 1 
         file.close() 
-    print(f"\n------ report community for {len(queryAllCommunties)} communties ------ ")
-    print(f"       communities over 5000 people (big): {countBig}")
-    print(f"                        sum entries (big): {sumBig}")
-    print(f"                    average entries (big): {round((sumBig/countBig), 2)}")
-    print(f"   communties that publish themself (big): {withoutOffenerHaushaltBig}") 
+    print(f"\n------ report for {len(queryAllCommunties)} municipalities ------ ")
+    print(f"       municipalities over 5000 people (big): {countBig}")
+    print(f"                           sum entries (big): {sumBig}")
+    print(f"                       average entries (big): {round((sumBig/countBig), 2)}")
+    print(f"  municipalities that publish themself (big): {withoutOffenerHaushaltBig}") 
     print()
-    print(f"    communities below 5000 people (small): {countSmall}")
-    print(f"                    entries below (small): {sumSmall}") 
-    print(f" communties that publish themself (small): {withoutOffenerHaushaltSmall}") 
-    print(f"                  average entries (small): {round((sumSmall/countSmall), 2)}")
-    print(f"          communities without publication: {len(queryAllCommunties)-len(queryCommunityByDataset)}")          
+    print(f"    municipalities below 5000 people (small): {countSmall}")
+    print(f"                       entries below (small): {sumSmall}") 
+    print(f"municipalities that publish themself (small): {withoutOffenerHaushaltSmall}") 
+    print(f"                     average entries (small): {round((sumSmall/countSmall), 2)}")
+    print(f"          municipalities without publication: {len(queryAllCommunties)-len(queryCommunityByDataset)}")          
     print()
-    print(f"  entries published by offenerhaushalt.at: {entriesPublishedByOffenerHaushalt}")          
+    print(f"     entries published by offenerhaushalt.at: {entriesPublishedByOffenerHaushalt}")          
 
 
 def generateReportWithFailedUrls(session):
-    print("generate report with failed urls...")
+    print("\ngenerate report with failed urls...")
     query = session.query(DistributionStatus).all()
 
     with open("reports/listFailedDistributions.csv", mode = 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["distribution id", "status", "eople", "url"])   
+        writer.writerow(["distribution id", "status", "people", "url"])   
         
         for distStatus in query:
             writer.writerow([distStatus.id, distStatus.status, distStatus.url])
@@ -342,6 +343,19 @@ def generateReportWithFailedUrls(session):
     query = session.query(DistributionStatus, func.count(DistributionStatus.id)).group_by(DistributionStatus.status).all()
     for ds in query:
         print(f"status {ds[0].status}: {ds[1]}")           
+
+def generateListOfDatasetNames(session):
+    print("\ngenerate report for all dataset titles which are not part of offenerhaushalt.at...")
+    query = session.query(Dataset, Community).filter(Dataset.communityId == Community.id).all()
+    with open("reports/publishedNames.csv", mode = 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["title", "publisher name"])   
+        
+        for entry in query:
+            if not (entry[0].catalogueId == "offenerhaushalt-at"):
+                writer.writerow([entry[0].title, entry[0].publisherName])
+        
+        file.close() 
 
 def checkForMatchingCommunity(session, dataset):
     if dataset.publisherName and not dataset.communityId:
@@ -366,4 +380,4 @@ def checkForMatchingCommunity(session, dataset):
 
 
 if __name__ == "__main__":
-    generateReports()
+    generateReports(False)
