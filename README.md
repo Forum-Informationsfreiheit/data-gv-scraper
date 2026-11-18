@@ -2,8 +2,9 @@
 ## run all
 <code>python scrape.py</code> runs scrapping of data.gv.at (creates local db) and creates reports in /reports folder. Furthermore there is a overall and simplied report in the terminal
 
-## create reports form db
+## create reports from db
 <code>python generateReports.py</code>
+This only works if you created the database in the past
 
 ## Feature toggles
 ### since IFG
