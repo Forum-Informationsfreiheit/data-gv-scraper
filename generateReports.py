@@ -11,12 +11,12 @@ from parse import emptyOrNull
 
 def generateReports(includesFileCheck):
     session = get_session(init_db())
-    # importCommunity(session)
-    # generateMetadataReport(session, includesFileCheck)
-    # generateKeywordReport(session)
-    # generateCategoriesReport(session)
-    # generateCommunityReport(session)
-    # generateReportWithFailedUrls(session)
+    importCommunity(session)
+    generateMetadataReport(session, includesFileCheck)
+    generateKeywordReport(session)
+    generateCategoriesReport(session)
+    generateCommunityReport(session)
+    generateReportWithFailedUrls(session)
     generateListOfDatasetNames(session)
 
 def generateMetadataReport(session, includesFileCheck):
