@@ -5,7 +5,7 @@ import re
 
 from sqlalchemy import func
 
-from api_client.database import Category, CategoryDataset, Community, Dataset, Keyword, KeywordDataset, MissingInfo, get_session, init_db
+from api_client.database import Category, CategoryDataset, Community, Dataset, DistributionStatus, Keyword, KeywordDataset, MissingInfo, get_session, init_db
 from checkDistributions import checkDistributions
 from parse import emptyOrNull
 
@@ -17,8 +17,8 @@ def generateReports(includesFileCheck):
     generateKeywordReport(session)
     generateCategoriesReport(session)
     generateCommunityReport(session)
-    if (includesFileCheck):
-        generateReportWithFailedUrls(session)
+    #if (includesFileCheck):
+    generateReportWithFailedUrls(session)
 
 def generateMetadataReport(session, includesFileCheck):
     print("generating metadata report...")
@@ -147,11 +147,11 @@ def importCommunity(session):
                 addToDatabase = True
             
             if addToDatabase:
-                if not session.query(Community).filter_by(id=id).first():
+                hasEntry = session.query(Community).filter_by(id=id).first()
+                if not hasEntry:
                     session.add(Community(id = id, name = name, people = people))
-
+        file.close()
     session.commit()
-    file.close()
 
 def generateKeywordReport(session):
     countOnlyUsedOnce = 0
@@ -247,7 +247,20 @@ def generateCommunityReport(session):
 
 def generateReportWithFailedUrls(session):
     print("generate report with failed urls...")
-    
+    query = session.query(DistributionStatus).all()
+
+    with open("reports/listFailedDistributions.csv", mode = 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["distribution id", "status", "eople", "url"])   
+        
+        for distStatus in query:
+            writer.writerow([distStatus.id, distStatus.status, distStatus.url])
+        
+        file.close() 
+
+    query = session.query(DistributionStatus, func.count(DistributionStatus.id)).group_by(DistributionStatus.status).all()
+    for ds in query:
+        print(f"status {ds[0].status}: {ds[1]}")           
 
 def checkForMatchingCommunity(session, dataset):
     if dataset.publisherName and not dataset.communityId:
