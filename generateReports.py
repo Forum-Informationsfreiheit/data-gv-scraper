@@ -9,7 +9,6 @@ from api_client.database import Category, CategoryDataset, Community, Dataset, D
 from checkDistributions import checkDistributions
 from parse import emptyOrNull
 
-
 def generateReports(includesFileCheck):
     session = get_session(init_db())
     importCommunity(session)
@@ -17,7 +16,6 @@ def generateReports(includesFileCheck):
     generateKeywordReport(session)
     generateCategoriesReport(session)
     generateCommunityReport(session)
-    #if (includesFileCheck):
     generateReportWithFailedUrls(session)
 
 def generateMetadataReport(session, includesFileCheck):
@@ -57,13 +55,17 @@ def generateMetadataReport(session, includesFileCheck):
             countDatasets += 1
             if includesFileCheck and (countDatasets % 5 == 0):
                 print(f"                                {countDatasets}/{countAll} datasets analysed | including {countDistributions} files ({countUnsuccessfullDistributions} were not status 200)")
+            else:
+                if countDatasets % 1000 == 0:
+                    print(f"                                {countDatasets}/{countAll} datasets analysed")
             
             checkForMatchingCommunity(session, dataset)
+            
+            dist = checkDistributions(session, dataset.distributions, dataset.id, includesFileCheck)
+            countMissingLicense += dist[2]
             if includesFileCheck:
-                dist = checkDistributions(session, dataset.distributions, dataset.id)
                 countUnsuccessfullDistributions += dist[0]
                 countDistributions += dist[1]
-                countMissingLicense += dist[2]
 
             if emptyOrNull(dataset.title):
                 countNoTitle += 1
@@ -114,7 +116,7 @@ def generateMetadataReport(session, includesFileCheck):
     if includesFileCheck:
         print(f"                            distributions: {countDistributions}")  
         print(f"               unsucessfull distributions: {countUnsuccessfullDistributions}")
-        print(f"             distribution without license: {countMissingLicense}")
+    print(f"             distribution without license: {countMissingLicense}")
 
 def importCommunity(session):
     # https://www.statistik.at/statistiken/bevoelkerung-und-soziales/bevoelkerung/bevoelkerungsstand/bevoelkerung-zu-jahres-/-quartalsanfang
@@ -201,48 +203,127 @@ def generateCategoriesReport(session):
     print(f"\n------ report categories for {len(query)} elements ------ ")
     print(f"                   categoriesOnlyUsedOnce: {countOnlyUsedOnce}")
 
+class CommunityReport():
+    id = ""
+    name = ""
+    people = 0
+    keywords = 0
+    categories = 0
+    datasets = 0
+    files = -1
+    containsIfg = -1
+    publishedOffenerHaushalt = 0
+
 def generateCommunityReport(session):
     print("generating community report...")
-    query = session.query(Dataset, Community, func.count(Dataset.communityId)
-        ).group_by(Dataset.communityId
-        ).filter(Dataset.communityId == Community.id
-        ).order_by(Community.people.desc()).all()
+    queryAllCommunties = session.query(Community).order_by(Community.people.desc()).all()
 
-    countCommunitys = session.query(Community.id).count()
-    
+    communities= {}
+    for entry in queryAllCommunties:
+        key = entry.id
+        value = CommunityReport()
+        value.id = entry.id,
+        value.people = entry.people,
+        value.name = entry.name
+        communities.update({key: value})
+
+    queryCommunityByDataset = session.query(Dataset, Community, func.count(Dataset.communityId),
+        ).group_by(Dataset.communityId
+        ).filter(Community.id == Dataset.communityId).all()
+    for entry in queryCommunityByDataset:
+        communities.get(entry[1].id).datasets = entry [2]
+
+    queryCommunityByCategory = session.query(Dataset, Community, CategoryDataset, func.count(CategoryDataset.datasetId),
+        ).group_by(Dataset.communityId
+        ).filter(Community.id == Dataset.communityId, CategoryDataset.datasetId == Dataset.id).all()
+    for entry in queryCommunityByCategory:
+        communities.get(entry[1].id).categories = entry[3]
+
+    queryCommunityByKeyword = session.query(Dataset, Community, KeywordDataset, func.count(KeywordDataset.datasetId),
+        ).group_by(Dataset.communityId
+        ).filter(Community.id == Dataset.communityId, KeywordDataset.datasetId == Dataset.id).all()
+    for entry in queryCommunityByKeyword:
+        communities.get(entry[1].id).keywords = entry[3]
+
+    entriesPublishedByOffenerHaushalt = 0
+    queryDatasetsForCommunity = session.query(Dataset, Community).filter(Community.id == Dataset.communityId).all()
+    for entry in queryDatasetsForCommunity:
+        if entry[0].catalogueId == "offenerhaushalt-at":
+            communities.get(entry[1].id).publishedOffenerHaushalt += 1
+            entriesPublishedByOffenerHaushalt +=1
+
     with open("reports/communityCount.csv", mode = 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(["glz", "name", "people", "count", "entries per 1000 people"])
+        writer.writerow([
+            "glz", 
+            "name", 
+            "people", 
+            "nicht offener haushalt"
+            "datasets", 
+            "keywords sum",
+            "keywords avg",
+            "categories sum", 
+            "categories avg", 
+            "entries per 1000 people",
+            "offener haushalt"
+        ])
 
         countBig = 0
         sumBig = 0
+        withoutOffenerHaushaltBig = 0
         countSmall = 0
         sumSmall = 0
-        communityWithoutEntry = 0
+        withoutOffenerHaushaltSmall = 0
 
-        for entry in query:
-            countCommunitys -= 1
-            entriesPerPeople = entry[2] / entry[1].people * 1000;
-            writer.writerow([entry[1].id, entry[1].name, entry[1].people, entry[2], entriesPerPeople])
-            if entry[1].people > 5000:
+        for id in communities:
+            community = communities.get(id)
+            keywordAvg = 0
+            categoryAvg = 0
+            entriesPer100People = 0
+            if community.datasets > 0:
+                keywordAvg = community.keywords / community.datasets 
+                categoryAvg = community.categories / community.datasets
+                entriesPer100People = community.people[0] / community.datasets / 1000
+            writer.writerow([
+                community.id[0], 
+                community.name, 
+                community.people[0],
+                community.datasets-community.publishedOffenerHaushalt,
+                community.datasets, 
+                community.keywords,
+                round(keywordAvg, 2),                
+                community.categories,
+                round(categoryAvg, 2),
+                round(entriesPer100People, 2),
+                community.publishedOffenerHaushalt,
+                #community.files,
+                #community.containsIfg
+            ])
+
+            if community.people[0] > 5000:
                 countBig += 1
-                sumBig += entry[2]
+                sumBig += community.datasets
+                if (community.datasets-community.publishedOffenerHaushalt > 0):
+                    withoutOffenerHaushaltBig += 1 
             else:
                 countSmall += 1
-                sumSmall += entry[2]
-            if entry[2] < 1:
-                communityWithoutEntry += 1
-                
+                sumSmall += community.datasets
+                if (community.datasets-community.publishedOffenerHaushalt > 0):
+                    withoutOffenerHaushaltSmall += 1 
         file.close() 
-    print(f"\n------ report community for {len(query)} elements ------ ")
-    print(f"                   community without data: {countCommunitys}")  
-    print(f"             communities over 5000 people: {countBig}")
-    print(f"                 entries over 5000 people: {sumBig}")
-    print(f"                average entries over 5000: {sumBig/countBig}")
-    print(f"            communities below 5000 people: {countSmall}")
-    print(f"                entries below 5000 people: {sumSmall}")
-    print(f"               average entries below 5000: {sumSmall/countSmall}")
-    print(f"          communities without publication: {communityWithoutEntry}")          
+    print(f"\n------ report community for {len(queryAllCommunties)} communties ------ ")
+    print(f"       communities over 5000 people (big): {countBig}")
+    print(f"                        sum entries (big): {sumBig}")
+    print(f"                    average entries (big): {round((sumBig/countBig), 2)}")
+    print(f"   communties that publish themself (big): {withoutOffenerHaushaltBig}") 
+    print()
+    print(f"    communities below 5000 people (small): {countSmall}")
+    print(f"                    entries below (small): {sumSmall}") 
+    print(f" communties that publish themself (small): {withoutOffenerHaushaltSmall}") 
+    print(f"                  average entries (small): {round((sumSmall/countSmall), 2)}")
+    print(f"          communities without publication: {len(queryAllCommunties)-len(queryCommunityByDataset)}")          
+    print()
+    print(f"  entries published by offenerhaushalt.at: {entriesPublishedByOffenerHaushalt}")          
 
 
 def generateReportWithFailedUrls(session):

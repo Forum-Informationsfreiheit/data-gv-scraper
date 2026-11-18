@@ -10,27 +10,14 @@ from parse import parseJsonCatalog, parseJsonDataset, parseDate
 def scrapeAndReport():
     session = get_session(init_db())
     dataSetsSinceIFG = True
+    #If the the file check is included, it takes about 10 hours to run the whole script
+    #otherwise one or two hours
     includesFileCheck = False
 
-    #scrapeOpenDataGVat(session, dataSetsSinceIFG);
+    scrapeOpenDataGVat(session, dataSetsSinceIFG);
     generateReports(includesFileCheck);
 
-    #test(session)
-
     session.close()
-
-# TODO remove me
-def test(session):
-    client = APIClient(base_url="https://www.data.gv.at/api/hub/search")
-
-    datasetId = "979043c4-601d-4bd0-9963-0b19e20d92aa"
-    response = client.get(f"/datasets/{datasetId}")
-    response.raise_for_status()
-    detail = response.json()['result']
-    dataset = parseJsonDataset(session, "1", datasetId, detail)
-    
-    print(dataset.title)
-
 
 def scrapeOpenDataGVat(session, dataSetsSinceIFG):
     client = APIClient(base_url="https://www.data.gv.at/api/hub/search")
